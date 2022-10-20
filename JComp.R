@@ -6,6 +6,7 @@
   library(VIM)
   library(mice)
   library(ggplot2)
+  library(corrplot)
 }
 #importing full set and filtering plus cleaning
 {
@@ -383,7 +384,157 @@
     ggplot(country_wise_latest_data, aes(median_age, positive_rate))+xlim(20, 40)+geom_point()+geom_smooth()
     ggplot(country_wise_latest_data, aes(median_age, people_fully_vaccinated_per_hundred))+xlim(20, 40)+geom_point()+geom_smooth()
     
+  }
+  
+  #models
+  {
+    #rescaling
+    {
+      income_rescale <- min_full_set_by_income %>%
+        mutate_if(is.numeric, funs(as.numeric(scale(.))))
+      factos_ir <- data.frame(select_if(income_rescale, is.factor))
+      ncol(factos_ir)
+      ir_h <- income_rescale %>%
+        filter(location=="High income") %>%
+        select(-location, -iso_code, -date, -population, -total_cases, -total_deaths, -people_fully_vaccinated)
+      ir_um <- income_rescale %>%
+        filter(location=="Upper middle income") %>%
+        select(-location, -iso_code, -date, -population, -total_cases, -total_deaths, -people_fully_vaccinated)
+      ir_lm <- income_rescale %>%
+        filter(location=="Lower middle income") %>%
+        select(-location, -iso_code, -date, -population, -total_cases, -total_deaths, -people_fully_vaccinated)
+      ir_l <- income_rescale %>%
+        filter(location=="Low income") %>%
+        select(-location, -iso_code, -date, -population, -total_cases, -total_deaths, -people_fully_vaccinated)
+      
     }
+    
+    #correlation matrices
+    {
+      hi_corrs <- cor(ir_h)
+      hi_corrs
+      um_corrs <- cor(ir_um)
+      um_corrs
+      lm_corrs <- cor(ir_lm)
+      lm_corrs
+      lo_corrs <- cor(ir_l)
+      lo_corrs
+      
+      corrplot(hi_corrs)
+      corrplot(um_corrs)
+      corrplot(lm_corrs)
+      corrplot(lo_corrs)  
+    }
+    
+    #glm - gaussian
+    {
+      #models for high income
+      {
+        smp_size_h <- floor(0.75*nrow(ir_h))
+        set.seed(1729)
+        train_ind <- sample(seq_len(nrow(ir_h)), size=smp_size_h)
+        train_h <- ir_h[train_ind, ]
+        test_h <- ir_h[-train_ind, ]
+        
+        gauss_h_tcpm_pv <- glm(total_cases_per_million~people_vaccinated, data=train_h, family='gaussian')
+        gauss_h_tdpm_pv <- glm(total_deaths_per_million~people_vaccinated, data=train_h, family='gaussian')
+        
+        summary(gauss_h_tcpm_pv)
+        summary(gauss_h_tdpm_pv)
+        
+        plot(gauss_h_tcpm_pv)
+        plot(gauss_h_tdpm_pv)
+        
+        pred_gauss_h_tcpm_pv <- predict(gauss_h_tcpm_pv, list(people_vaccinated = test_h$people_vaccinated), type="response")
+        plot(train_h$people_vaccinated, train_h$total_cases_per_million, main = "High Income cases vs vacc", xlab="High Income Vaccines", ylab="High Income Total Cases")
+        lines(test_h$people_vaccinated, pred_gauss_h_tcpm_pv)
+        
+        pred_gauss_h_tdpm_pv <- predict(gauss_h_tdpm_pv, list(people_vaccinated = test_h$people_vaccinated), type="response")
+        plot(train_h$people_vaccinated, train_h$total_deaths_per_million, main = "High Income deaths vs vacc", xlab="High Income Vaccines", ylab="High Income Total Deaths")
+        lines(test_h$people_vaccinated, pred_gauss_h_tdpm_pv)
+      }
+      #models for upper middle income
+      {
+        smp_size_um <- floor(0.75*nrow(ir_um))
+        set.seed(1729)
+        train_ind <- sample(seq_len(nrow(ir_um)), size=smp_size_um)
+        train_um <- ir_um[train_ind, ]
+        test_um <- ir_um[-train_ind, ]
+        
+        gauss_um_tcpm_pv <- glm(total_cases_per_million~people_vaccinated, data=train_um, family='gaussian')
+        gauss_um_tdpm_pv <- glm(total_deaths_per_million~people_vaccinated, data=train_um, family='gaussian')
+        
+        summary(gauss_um_tcpm_pv)
+        summary(gauss_um_tdpm_pv)
+        
+        plot(gauss_um_tcpm_pv)
+        plot(gauss_um_tdpm_pv)
+        
+        pred_gauss_um_tcpm_pv <- predict(gauss_um_tcpm_pv, list(people_vaccinated = test_um$people_vaccinated), type="response")
+        plot(train_um$people_vaccinated, train_um$total_cases_per_million, main = "Up. Mid. Income cases vs vacc", xlab="Up. Mid. Income Vaccines", ylab="Up. Mid. Income Total Cases")
+        lines(test_um$people_vaccinated, pred_gauss_um_tcpm_pv)
+        
+        pred_gauss_um_tdpm_pv <- predict(gauss_um_tdpm_pv, list(people_vaccinated = test_um$people_vaccinated), type="response")
+        plot(train_um$people_vaccinated, train_um$total_deaths_per_million, main = "Up. Mid. Income deaths vs vacc", xlab="Up. Mid. Income Vaccines", ylab="Up. Mid. Income Total Deaths")
+        lines(test_um$people_vaccinated, pred_gauss_um_tdpm_pv)
+      }
+      #models for lower middle income
+      {
+        smp_size_lm <- floor(0.75*nrow(ir_lm))
+        set.seed(1729)
+        train_ind <- sample(seq_len(nrow(ir_lm)), size=smp_size_lm)
+        train_lm <- ir_lm[train_ind, ]
+        test_lm <- ir_lm[-train_ind, ]
+        
+        gauss_lm_tcpm_pv <- glm(total_cases_per_million~people_vaccinated, data=train_lm, family='gaussian')
+        gauss_lm_tdpm_pv <- glm(total_deaths_per_million~people_vaccinated, data=train_lm, family='gaussian')
+        
+        summary(gauss_lm_tcpm_pv)
+        summary(gauss_lm_tdpm_pv)
+        
+        plot(gauss_lm_tcpm_pv)
+        plot(gauss_lm_tdpm_pv)
+        
+        pred_gauss_lm_tcpm_pv <- predict(gauss_lm_tcpm_pv, list(people_vaccinated = test_lm$people_vaccinated), type="response")
+        plot(train_lm$people_vaccinated, train_lm$total_cases_per_million, main = "Low Mid. Income cases vs vacc", xlab="Low Mid. Income Vaccines", ylab="Low Mid. Income Total Cases")
+        lines(test_lm$people_vaccinated, pred_gauss_lm_tcpm_pv)
+        
+        pred_gauss_lm_tdpm_pv <- predict(gauss_lm_tdpm_pv, list(people_vaccinated = test_lm$people_vaccinated), type="response")
+        plot(train_lm$people_vaccinated, train_lm$total_deaths_per_million, main = "Low Mid. Income deaths vs vacc", xlab="Low Mid. Income Vaccines", ylab="Low Mid. Income Total Deaths")
+        lines(test_lm$people_vaccinated, pred_gauss_lm_tdpm_pv)
+      }
+      #models for low income
+      {
+        smp_size_l <- floor(0.75*nrow(ir_l))
+        set.seed(1729)
+        train_ind <- sample(seq_len(nrow(ir_l)), size=smp_size_l)
+        train_l <- ir_l[train_ind, ]
+        test_l <- ir_l[-train_ind, ]
+        
+        gauss_l_tcpm_pv <- glm(total_cases_per_million~people_vaccinated, data=train_l, family='gaussian')
+        gauss_l_tdpm_pv <- glm(total_deaths_per_million~people_vaccinated, data=train_l, family='gaussian')
+        
+        summary(gauss_l_tcpm_pv)
+        summary(gauss_l_tdpm_pv)
+        
+        plot(gauss_l_tcpm_pv)
+        plot(gauss_l_tdpm_pv)
+        
+        pred_gauss_l_tcpm_pv <- predict(gauss_l_tcpm_pv, list(people_vaccinated = test_l$people_vaccinated), type="response")
+        plot(train_l$people_vaccinated, train_l$total_cases_per_million, main = "Low Income cases vs vacc", xlab="Low Income Vaccines", ylab="Low Income Total Cases")
+        lines(test_l$people_vaccinated, pred_gauss_l_tcpm_pv)
+        
+        pred_gauss_l_tdpm_pv <- predict(gauss_l_tdpm_pv, list(people_vaccinated = test_l$people_vaccinated), type="response")
+        plot(train_l$people_vaccinated, train_l$total_deaths_per_million, main = "Low Income deaths vs vacc", xlab="Low Income Vaccines", ylab="Low Income Total Deaths")
+        lines(test_l$people_vaccinated, pred_gauss_l_tdpm_pv)
+      }
+    }
+    
+    #todo nls (non linear least squares)
+    {
+      
+    }
+  }
 }
 #insights
 #OWID_INT (International) is a row which provides no value to the dataset
