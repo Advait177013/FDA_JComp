@@ -7,11 +7,16 @@
   library(mice)
   library(ggplot2)
   library(corrplot)
+  library(randomForest)
+  library(bnlearn)
 }
+
 #importing full set and filtering plus cleaning
 {
+  #initial import and checks
   {
-    full_set <- read.csv("C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\owid-covid-data.csv", header=TRUE)
+    location <- "C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\owid-covid-data.csv"
+    full_set <- read.csv(location , header=TRUE)
     nrow(full_set)
     ncol(full_set)
     #checking all columns in the dataset, so that we can remove data we assume as irrelevant
@@ -25,6 +30,7 @@
     full_set$date <- dateFormat
     sum(is.na(full_set))
   }
+  
   #dropping unnecessary cols
   {
   colnames(full_set)
@@ -39,7 +45,9 @@
     summary(min_full_set)
     country_list <- unique(min_full_set$location)
   }
+  
   #md.pattern(min_full_set[, c(12:13)])
+  #mice na pattern
   
   #locations where over 40% of all values are NA, can prompt to check whats wrong
   {
@@ -57,9 +65,11 @@
   
   #making three subsets according to the given data, by income,region,country
   {
-    {a<- min_full_set %>%
+    #checking which regions/continents exist in dataset
+    {
+      a<- min_full_set %>%
       filter(substr(iso_code, 1, 4) == "OWID")
-    unique(a$iso_code)
+      unique(a$iso_code)
     }
     
     drop_locations_by_region <- c("International", "World", "Africa", "South America", "North America", "Europe", "European Union", "Asia", "Oceania")
@@ -94,6 +104,7 @@
     }
     return(c)
   }
+  
   #imputing the values which can be imputed with updown
   {
     min_full_set_by_country <- updown_filler(min_full_set_by_country)
@@ -119,6 +130,7 @@
     min_full_set_by_region <- min_full_set_by_region[!min_full_set_by_region$location %in% c("International"), ]
     
   }
+  
   #only min_full_set_by_country has missing values, imputing them one by one 
   c<-min_full_set_by_country
   md.pattern(c)
@@ -294,6 +306,15 @@
   (colMeans(is.na(c)))*100
   min_full_set_by_country<-c
 }
+
+#exporting to csv
+{
+  write.csv(min_full_set_by_country, "C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\min_full_set_by_country.csv")
+  write.csv(min_full_set_by_income, "C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\min_full_set_by_income.csv")
+  write.csv(min_full_set_by_region, "C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\min_full_set_by_region.csv")
+  
+}
+
 
 #graphs and analysis
 {
@@ -530,10 +551,61 @@
       }
     }
     
-    #todo nls (non linear least squares)
+    #random forest prediction
     {
-      
+      ir_l.rf <- randomForest(people_fully_vaccinated_per_hundred ~ ., data=train_l, importance=TRUE, proximty=TRUE)
+      print(ir_l.rf)
+      importance(ir_l.rf)
+      predir_l.rf <- predict(ir_l.rf, test_l)
+      plot(test_l$people_fully_vaccinated_per_hundred, predir_l.rf)
     }
+    
+    #naive bayes probabilistic model and querying
+    {
+      #setting up
+      {
+        df <- min_full_set_by_country
+        df <- df %>%
+          select(date, total_cases_per_million, total_deaths_per_million, total_tests_per_thousand, positive_rate, people_fully_vaccinated_per_hundred, population_density, median_age, gdp_per_capita, human_development_index)
+        df$date <- as.POSIXct(df$date, format="%Y-%m-%d", tz="UTC")
+        df$date <- cut(df$date, breaks = "2 quarters", 
+                       labels=c("early 2020", "late 2020", "early 2021", "late 2021", "early 2022", "late 2022"))
+        df$total_cases_per_million <- cut(df$total_cases_per_million, breaks = c(-Inf, 1000, 100000, 250000, 400000, Inf), 
+                                          labels=c("cpm < 1000", "cpm 1000-100000",  "cpm 100000-250000",  "cpm 250000-400000",  "cpm > 400000"))
+        df$total_deaths_per_million <- cut(df$total_deaths_per_million, breaks = c(-Inf, 100, 1000, 2500, 4000, Inf), 
+                                           labels=c("dpm < 100", "dpm 100-1000",  "dpm 1000-2500",  "dpm 2500-4000",  "dpm > 4000"))
+        df$total_tests_per_thousand <- cut(df$total_tests_per_thousand, breaks = c(-Inf, 1000, 10000, 20000, 30000, Inf), 
+                                           labels=c("tpt < 1000", "tpt 1000-10000",  "tpt 10000-20000",  "tpt 20000-30000",  "tpt > 30000"))
+        df$positive_rate <- cut(df$positive_rate, breaks = c(-Inf, 0.2, 0.5, 0.8, 1), 
+                                labels=c("pr < 0.2", "pr 0.2-0.5",  "pr 0.5-0.8",  "pr > 0.8"))
+        df$people_fully_vaccinated_per_hundred <- cut(df$people_fully_vaccinated_per_hundred, breaks = c(-Inf, 20, 40, 60, 80, Inf), 
+                                                      labels=c("vph < 20", "vph 20-40",  "vph 40-60",  "vph 60-80",  "vph > 80"))
+        df$population_density <- cut(df$population_density, breaks = c(0, 100, 500, 1000, 2000, Inf), 
+                                     labels=c("pop den < 100", "pop den 100-500",  "pop den 500-1000",  "pop den 1000-2000",  "pop den > 2000"))
+        df$median_age <- cut(df$median_age, breaks = c(0, 20, 30, 40, Inf), 
+                             labels=c("med age < 20", "med age 20-30",  "med age 30-40", "med age > 40"))
+        df$gdp_per_capita <- cut(df$gdp_per_capita, breaks = c(0, 1000, 10000, 40000, 80000, Inf), 
+                                 labels=c("gdpppp < 1000", "gdpppp 1000-10000",  "gdpppp 10000-40000", "gdpppp 40000-80000", "gdpppp > 80000"))
+        df$human_development_index <- cut(df$human_development_index, breaks = c(0, 0.4, 0.6, 0.8, 0.9, Inf), 
+                                          labels=c("hdi < 0.4", "hdi 0.4-0.6",  "hdi 0.6-0.8", "hdi 0.8-0.9", "hdi > 0.9"))
+        dag = hc(df)
+        fit = bn.fit(dag, df, method="bayes")
+      }
+      
+      
+      
+      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.6-0.8"))))
+      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.8-0.9"))))
+      
+      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_deaths_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.6-0.8"))))
+      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_deaths_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.8-0.9"))))
+      
+      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), evidence = (date == "early 2022" & human_development_index=="hdi 0.6-0.8"))))
+      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), evidence = (date == "early 2022" & human_development_index=="hdi 0.8-0.9"))))
+      
+      
+      }
+    
   }
 }
 #insights
@@ -552,4 +624,5 @@
 #external sets such as CIA world factbook, Global Data Lab, etc.
 #We have manually carried over such data into the covid dataset
 
+#----------------------------------------------------------------------------------------------------#
 
