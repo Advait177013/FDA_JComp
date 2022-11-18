@@ -1,4 +1,5 @@
 #covid dataset from OurWorldInData
+#importing libraries
 {
   library(dplyr)
   library(tibble)
@@ -317,7 +318,6 @@
   write.csv(min_full_set_by_region, "C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\min_full_set_by_region.csv")
   
 }
-
 
 #graphs and analysis
 {
@@ -670,21 +670,24 @@
     
   }
 }
+
 #insights
-#OWID_INT (International) is a row which provides no value to the dataset
-#owing to the lack of details and updates
-
-#a few locations like Guernsey have no data available at any point of time for 
-#categories such as total_cases, total_deaths, etc. While the data is individually
-#available on the government websites in most cases (eg. https://covid19.gov.gg/test-results)
-#we have currently decided to instead drop the locations without such data in the
-#OWID dataset. Such countries include
-#Guernsey, Jersey, North Korea, Guam, US Virgin Islands, Faroe Islands, North Cyprus, Vatican, etc
-
-#Many cases exist where the full OWID datasets include values for missing columns
-#eg, HDI, Median Age. Or when such data is missing from OWID but available with
-#external sets such as CIA world factbook, Global Data Lab, etc.
-#We have manually carried over such data into the covid dataset
-
+{
+  #OWID_INT (International) is a row which provides no value to the dataset
+  #owing to the lack of details and updates
+  
+  #a few locations like Guernsey have no data available at any point of time for 
+  #categories such as total_cases, total_deaths, etc. While the data is individually
+  #available on the government websites in most cases (eg. https://covid19.gov.gg/test-results)
+  #we have currently decided to instead drop the locations without such data in the
+  #OWID dataset. Such countries include
+  #Guernsey, Jersey, North Korea, Guam, US Virgin Islands, Faroe Islands, North Cyprus, Vatican, etc
+  
+  #Many cases exist where the full OWID datasets include values for missing columns
+  #eg, HDI, Median Age. Or when such data is missing from OWID but available with
+  #external sets such as CIA world factbook, Global Data Lab, etc.
+  #We have manually carried over such data into the covid dataset
+}
+  
 #----------------------------------------------------------------------------------------------------#
 
