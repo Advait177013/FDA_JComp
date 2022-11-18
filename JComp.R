@@ -9,14 +9,17 @@
   library(corrplot)
   library(randomForest)
   library(bnlearn)
+  library(gridExtra)
 }
 
 #importing full set and filtering plus cleaning
 {
   #initial import and checks
   {
-    location <- "C:\\Users\\advai\\Fall 22-23\\Data\\JComp\\owid-covid-data.csv"
-    full_set <- read.csv(location , header=TRUE)
+    temp <- tempfile(fileext=".zip")
+    download.file("https://drive.google.com/file/d/12q5C8v0qeKp-vpbahtdLC4k0smY6Gmdz/view?usp=sharing", temp)
+    out <- unzip(temp, exdir=tempdir())
+    full_set <- read.csv(out[14] , sep=";", header=TRUE)
     nrow(full_set)
     ncol(full_set)
     #checking all columns in the dataset, so that we can remove data we assume as irrelevant
@@ -346,7 +349,7 @@
     region_wise_latest_data <- min_full_set_by_region %>% filter(date == as.Date("2022-09-21"))
     region_wise_latest_data <- region_wise_latest_data %>% mutate(death_per_pop = total_deaths/population, cases_per_pop = total_cases/population, )
     ggplot(region_wise_latest_data, aes(location, total_cases_per_million))+geom_bar(stat='identity')
-    ggplot(region_wise_latest_data, aes(location, death_per_pop))+geom_bar(stat='identity')
+    ggplot(region_wise_latest_data, aes(location, death_per_pop))+geom_bar(stat='identity', aes(fill=location))
     
     region_wise_latest_data <- min_full_set_by_region %>% filter(date == as.Date("2022-06-21"))
     region_wise_latest_data <- region_wise_latest_data %>% mutate(death_per_pop = total_deaths/population, cases_per_pop = total_cases/population, )
@@ -366,7 +369,7 @@
     region_wise_latest_data <- min_full_set_by_region %>% filter(date == as.Date("2021-09-21"))
     region_wise_latest_data <- region_wise_latest_data %>% mutate(death_per_pop = total_deaths/population, cases_per_pop = total_cases/population, )
     ggplot(region_wise_latest_data, aes(location, total_cases_per_million))+geom_bar(stat='identity')
-    ggplot(region_wise_latest_data, aes(location, death_per_pop))+geom_bar(stat='identity')
+    ggplot(region_wise_latest_data, aes(location, death_per_pop))+geom_bar(stat='identity', aes(fill=location))
     
     region_wise_latest_data <- min_full_set_by_region %>% filter(date == as.Date("2021-06-21"))
     region_wise_latest_data <- region_wise_latest_data %>% mutate(death_per_pop = total_deaths/population, cases_per_pop = total_cases/population, )
@@ -432,12 +435,16 @@
     
     #correlation matrices
     {
+      colnames(ir_h)<-c("tcpm", "tdpm", "pv", "pcph")
       hi_corrs <- cor(ir_h)
       hi_corrs
+      colnames(ir_um)<-c("tcpm", "tdpm", "pv", "pcph")
       um_corrs <- cor(ir_um)
       um_corrs
+      colnames(ir_lm)<-c("tcpm", "tdpm", "pv", "pcph")
       lm_corrs <- cor(ir_lm)
       lm_corrs
+      colnames(ir_l)<-c("tcpm", "tdpm", "pv", "pcph")
       lo_corrs <- cor(ir_l)
       lo_corrs
       
@@ -449,6 +456,7 @@
     
     #glm - gaussian
     {
+      
       #models for high income
       {
         smp_size_h <- floor(0.75*nrow(ir_h))
@@ -553,11 +561,21 @@
     
     #random forest prediction
     {
-      ir_l.rf <- randomForest(people_fully_vaccinated_per_hundred ~ ., data=train_l, importance=TRUE, proximty=TRUE)
-      print(ir_l.rf)
-      importance(ir_l.rf)
-      predir_l.rf <- predict(ir_l.rf, test_l)
-      plot(test_l$people_fully_vaccinated_per_hundred, predir_l.rf)
+      smp_size <- floor(0.75*nrow(min_full_set_by_country))
+      set.seed(1337)
+      keepsrf = c("total_cases_per_million", "total_deaths_per_million", "total_tests_per_thousand", "positive_rate", "people_fully_vaccinated_per_hundred", "gdp_per_capita", "human_development_index")
+      rfset <- min_full_set_by_country[keepsrf]
+      train_ind <- sample(seq_len(nrow(rfset)), size=smp_size)
+      train_rf <- rfset[train_ind, ]
+      test_rf <- rfset[-train_ind, ]
+      my.rf <- randomForest(people_fully_vaccinated_per_hundred ~ . , data=train_h, importance=TRUE, proximty=TRUE)
+      print(my.rf)
+      d1 <- as.data.frame(importance(my.rf))
+      d1 <- d1 %>% mutate_if(is.numeric, round, digits=2)
+      grid.table(d1)
+      
+      predir.rf <- predict(my.rf, test_h)
+      plot(test_h$people_fully_vaccinated_per_hundred, predir.rf, xlab="real values", ylab="prediction from Random Forest", main="Comparing Predictions to Real Values")
     }
     
     #naive bayes probabilistic model and querying
@@ -592,17 +610,61 @@
         fit = bn.fit(dag, df, method="bayes")
       }
       
+      {
+        d1 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), 
+                                      evidence = (date == "late 2021" & human_development_index==c("hdi 0.8-0.9", "hdi > 0.9")))))
+        d2 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), 
+                                      evidence = (date == "early 2022" & human_development_index==c("hdi 0.8-0.9", "hdi > 0.9")))))
+        d3 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), 
+                                      evidence = (date == "late 2022" & human_development_index==c("hdi 0.8-0.9", "hdi > 0.9")))))
+        
+        highhdi <- matrix(data=c(c(d1), c(d2), c(d3)), byrow=FALSE, nrow=3, dimnames =list(c("late 2021", "early 2022", "late 2022"), c("cpm < 1k", "cpm 1k-100k",  "cpm 100k-250k",  "cpm 250k-400k",  "cpm > 400k")))
+        highhdi <- as.data.frame(highhdi)
+        highhdi <- highhdi %>% mutate_if(is.numeric, round, digits=2)
+        grid.table(highhdi)
+        
+        d1 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), 
+                                      evidence = (date == "late 2021" & human_development_index %in% c("hdi 0.4-0.6", "hdi < 0.4", "hdi 0.6-0.8")))))
+        d2 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), 
+                                      evidence = (date == "early 2022" & human_development_index %in% c("hdi 0.4-0.6", "hdi < 0.4", "hdi 0.6-0.8")))))
+        d3 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), 
+                                      evidence = (date == "late 2022" & human_development_index %in% c("hdi 0.4-0.6", "hdi < 0.4", "hdi 0.6-0.8")))))
+        
+        
+        lowhdi <- matrix(data=c(c(d1), c(d2), c(d3)), byrow=FALSE, nrow=3, dimnames =list(c("late 2021", "early 2022", "late 2022"), c("cpm < 1k", "cpm 1k-100k",  "cpm 100k-250k",  "cpm 250k-400k",  "cpm > 400k")))
+        lowhdi <- as.data.frame(lowhdi)
+        lowhdi <- lowhdi %>% mutate_if(is.numeric, round, digits=2)
+        grid.table(lowhdi)
+        
+      }
       
-      
-      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.6-0.8"))))
-      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_cases_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.8-0.9"))))
-      
-      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_deaths_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.6-0.8"))))
-      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_deaths_per_million"), evidence = (date == "early 2022" & human_development_index=="hdi 0.8-0.9"))))
-      
-      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), evidence = (date == "early 2022" & human_development_index=="hdi 0.6-0.8"))))
-      prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), evidence = (date == "early 2022" & human_development_index=="hdi 0.8-0.9"))))
-      
+      {
+        d1 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), 
+                                      evidence = (date == "late 2021" & human_development_index==c("hdi 0.8-0.9", "hdi > 0.9")))))
+        d2 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), 
+                                      evidence = (date == "early 2022" & human_development_index==c("hdi 0.8-0.9", "hdi > 0.9")))))
+        d3 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), 
+                                      evidence = (date == "late 2022" & human_development_index==c("hdi 0.8-0.9", "hdi > 0.9")))))
+        
+        highhdi <- matrix(data=c(c(d1), c(d2), c(d3)), byrow=FALSE, nrow=3, dimnames =list(c("late 2021", "early 2022", "late 2022"), c("tpt < 1k", "tpt 1k-10k",  "tpt 10k-20k",  "tpt 20k-30k",  "tpt > 30k")))
+        highhdi <- as.data.frame(highhdi)
+        highhdi <- highhdi %>% mutate_if(is.numeric, round, digits=2)
+        grid.table(highhdi)
+        
+        d1 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), 
+                                      evidence = (date == "late 2021" & human_development_index %in% c("hdi 0.4-0.6", "hdi < 0.4", "hdi 0.6-0.8")))))
+        d2 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), 
+                                      evidence = (date == "early 2022" & human_development_index %in% c("hdi 0.4-0.6", "hdi < 0.4", "hdi 0.6-0.8")))))
+        d3 <- prop.table(table(cpdist(fit, n = 10^6, nodes = c("total_tests_per_thousand"), 
+                                      evidence = (date == "late 2022" & human_development_index %in% c("hdi 0.4-0.6", "hdi < 0.4", "hdi 0.6-0.8")))))
+        
+        
+        lowhdi <- matrix(data=c(c(d1), c(d2), c(d3)), byrow=FALSE, nrow=3, dimnames =list(c("late 2021", "early 2022", "late 2022"), c("tpt < 1k", "tpt 1k-10k",  "tpt 10k-20k",  "tpt 20k-30k",  "tpt > 30k")))
+        lowhdi <- as.data.frame(lowhdi)
+        lowhdi <- lowhdi %>% mutate_if(is.numeric, round, digits=2)
+        grid.table(lowhdi)
+        
+      }
       
       }
     
